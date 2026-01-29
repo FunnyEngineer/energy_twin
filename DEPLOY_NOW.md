@@ -4,7 +4,8 @@
 
 Your app is ready! These files have been created:
 - `Procfile` - Tells Render how to start your app
-- `requirements.txt` - Updated with gunicorn
+- `runtime.txt` - Specifies Python 3.11 (for compatibility)
+- `requirements.txt` - Updated with gunicorn and flexible versions
 - `README_DEPLOYMENT.md` - Full deployment guide
 
 ## Step 2: Push to GitHub
