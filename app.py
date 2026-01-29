@@ -214,11 +214,11 @@ def get_weather(city):
     })
 
 
+# Load data when module is imported (works with both direct run and gunicorn)
+load_homes_data()
+
 if __name__ == '__main__':
-    # Load data and train model
-    load_homes_data()
-    
-    # Run the application
+    # Run the application directly (not used by gunicorn)
     print(f"\n{'='*70}")
     print(f"🌍 Energy Twin Finder Server Starting...")
     print(f"{'='*70}")
