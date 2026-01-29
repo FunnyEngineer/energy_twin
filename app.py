@@ -21,7 +21,7 @@ weather_service = WeatherService()
 ml_matcher = EnergyTwinMatcher()
 
 # Load homes data
-HOMES_DATA = []
+HOMES_DATA = None  # Keep as DataFrame for efficiency
 DATA_FILE = 'data/homes_data.parquet'
 
 
@@ -44,15 +44,15 @@ def convert_to_json_serializable(obj):
 
 
 def load_homes_data():
-    """Load homes data from parquet file"""
+    """Load homes data from parquet file - keep as DataFrame for efficiency"""
     global HOMES_DATA
     
     try:
         if os.path.exists(DATA_FILE):
             import pandas as pd
-            df = pd.read_parquet(DATA_FILE)
-            HOMES_DATA = df.to_dict('records')
-            print(f"✅ Loaded {len(HOMES_DATA)} homes from ResStock parquet dataset")
+            # Keep as DataFrame - more efficient for large datasets
+            HOMES_DATA = pd.read_parquet(DATA_FILE)
+            print(f"✅ Loaded {len(HOMES_DATA):,} homes from ResStock parquet dataset")
             
             # Train the ML model
             if len(HOMES_DATA) > 0:
@@ -68,8 +68,7 @@ def load_homes_data():
             
             from resstock_loader import ResStockDataLoader
             loader = ResStockDataLoader()
-            df = loader.download_sample_metadata(DATA_FILE, num_samples=1000)
-            HOMES_DATA = df.to_dict('records')
+            HOMES_DATA = loader.download_sample_metadata(DATA_FILE, num_samples=1000)
             
             if len(HOMES_DATA) > 0:
                 ml_matcher.fit(HOMES_DATA)
@@ -81,69 +80,124 @@ def load_homes_data():
         import traceback
         traceback.print_exc()
         # Create minimal fallback data so app doesn't crash
-        HOMES_DATA = []
+        import pandas as pd
+        HOMES_DATA = pd.DataFrame()
 
 
 @app.route('/')
 def index():
-    """Render the main page"""
-    return render_template('index.html')
+    """Render the main page with preloaded stats"""
+    # Calculate stats from loaded data
+    if HOMES_DATA is not None and len(HOMES_DATA) > 0:
+        stats = {
+            'total_homes': f"{len(HOMES_DATA):,}",
+            'avg_energy': f"{HOMES_DATA['monthly_kwh'].mean():.0f} kWh/month",
+            'cities': f"{HOMES_DATA['display_location'].nunique():,}"
+        }
+    else:
+        stats = {
+            'total_homes': "0",
+            'avg_energy': "-- kWh/month",
+            'cities': "0"
+        }
+    
+    return render_template('index.html', stats=stats)
 
 
 @app.route('/api/global-data')
 def get_global_data():
-    """Get global energy data for map visualization"""
+    """Get global energy data for map visualization - optimized with sampling"""
     
-    # Calculate statistics
+    if HOMES_DATA is None or len(HOMES_DATA) == 0:
+        return jsonify({
+            'success': False,
+            'message': 'No data available',
+            'homes': [],
+            'stats': {'total_homes': 0, 'avg_energy': 0, 'cities': 0}
+        })
+    
+    # Calculate statistics using full ResStock dataset
     total_homes = len(HOMES_DATA)
-    avg_energy = sum(h['monthly_usage'] for h in HOMES_DATA) / total_homes if total_homes > 0 else 0
-    # Count unique cities (all data is from USA)
-    cities = len(set(h['location'] for h in HOMES_DATA))
+    avg_energy = HOMES_DATA['monthly_kwh'].mean()
+    cities = HOMES_DATA['display_location'].nunique()
     
     stats = {
-        'total_homes': total_homes,
-        'avg_energy': avg_energy,
-        'cities': cities
+        'total_homes': int(total_homes),
+        'avg_energy': round(float(avg_energy), 1),
+        'cities': int(cities)
     }
+    
+    # OPTIMIZATION: Sample data for map display (10,000 homes instead of 549,971)
+    # This dramatically reduces transfer size and rendering time
+    sample_size = 10000
+    if len(HOMES_DATA) > sample_size:
+        # Random sample for geographic diversity
+        sampled_df = HOMES_DATA.sample(n=sample_size, random_state=42)
+    else:
+        sampled_df = HOMES_DATA
+    
+    # Prepare lightweight data for map (only essential fields)
+    homes_for_map = []
+    for _, row in sampled_df.iterrows():
+        home_data = {
+            'id': int(row.get('bldg_id', 0)),
+            'location': str(row.get('display_location', 'Unknown')),
+            'lat': round(float(row.get('in.weather_file_latitude', 39.8)), 2),  # Round for smaller JSON
+            'lon': round(float(row.get('in.weather_file_longitude', -98.5)), 2),
+            'usage': int(row.get('monthly_kwh', 900)),
+            'size': int(row.get('in.sqft..ft2', 1500)),
+            'type': str(row.get('in.geometry_building_type_acs', 'Single-Family Detached')),
+            'beds': int(row.get('in.bedrooms', 3)),
+            'occupants': int(row.get('in.occupants', 2)),
+        }
+        homes_for_map.append(home_data)
     
     return jsonify({
         'success': True,
-        'homes': HOMES_DATA,
-        'stats': stats
+        'homes': homes_for_map,
+        'stats': stats,
+        'sample_info': {
+            'displayed': len(homes_for_map),
+            'total': total_homes,
+            'note': f'Showing {len(homes_for_map):,} representative homes from {total_homes:,} total'
+        }
     })
 
 
 @app.route('/api/find-twins', methods=['POST'])
 def find_twins():
-    """Find energy twins for a user's home"""
+    """Find energy twins for a user's home - using ResStock native format"""
     
     try:
         data = request.json
         
-        # Parse user input
+        # Parse user input and convert to ResStock format
         user_home = {
-            'location': data.get('location', ''),
-            'home_size': int(data.get('home_size', 0)),
-            'bedrooms': int(data.get('bedrooms', 2)),
-            'occupants': int(data.get('occupants', 2)),
-            'home_type': data.get('home_type', 'apartment'),
-            'heating_type': data.get('heating_type', 'electric'),
-            'cooling_type': data.get('cooling_type', 'central_ac'),
-            'has_solar': 1 if data.get('has_solar') == 'yes' else 0,
+            # Use ResStock native column names
+            'in.sqft..ft2': int(data.get('home_size', 1500)),
+            'in.bedrooms': int(data.get('bedrooms', 3)),
+            'in.occupants': int(data.get('occupants', 2)),
+            'in.geometry_building_type_acs': data.get('building_type', 'Single-Family Detached'),
+            'in.heating_fuel': data.get('heating_fuel', 'Electricity'),
+            'in.hvac_cooling_type': data.get('cooling_type', 'Central AC'),
+            'in.ashrae_iecc_climate_zone_2004': data.get('climate_zone', 'Mixed-Humid'),
+            'display_location': data.get('location', 'USA'),
         }
         
         # Get monthly usage if provided
         monthly_usage = data.get('monthly_usage')
         if monthly_usage:
-            user_home['monthly_usage'] = int(monthly_usage)
+            user_home['monthly_kwh'] = float(monthly_usage)
+        else:
+            # Predict energy usage based on similar homes (ML-based)
+            predicted_usage = ml_matcher.predict_energy_usage(user_home, HOMES_DATA, k=50)
+            user_home['monthly_kwh'] = predicted_usage
+            print(f"🔮 Predicted energy usage: {predicted_usage:.0f} kWh/month")
         
-        # Get weather data for user's location
-        weather = weather_service.get_weather_by_city(user_home['location'])
-        user_home['temperature'] = weather['temperature']
-        
-        # Estimate energy usage if not provided
-        if 'monthly_usage' not in user_home:
-            user_home['monthly_usage'] = estimate_energy_usage(user_home)
+        # Solar panel
+        has_solar = data.get('has_solar', 'No')
+        user_home['has_solar_panel'] = (has_solar.lower() == 'yes')
+        user_home['in.has_pv'] = 'Yes' if user_home['has_solar_panel'] else 'No'
         
         # Get k value
         k_value = int(data.get('k_value', 10))
@@ -154,15 +208,35 @@ def find_twins():
         # Calculate insights
         insights = ml_matcher.calculate_insights(similar_homes, user_home)
         
+        # Format similar homes for frontend
+        twins_formatted = []
+        for twin in similar_homes:
+            twin_formatted = {
+                'id': twin.get('bldg_id', 0),
+                'location': twin.get('display_location', 'Unknown'),
+                'latitude': twin.get('in.weather_file_latitude', 0),
+                'longitude': twin.get('in.weather_file_longitude', 0),
+                'home_size': int(twin.get('in.sqft..ft2', 1500)),
+                'bedrooms': int(twin.get('in.bedrooms', 3)),
+                'occupants': int(twin.get('in.occupants', 2)),
+                'building_type': twin.get('in.geometry_building_type_acs', 'Unknown'),
+                'heating_fuel': twin.get('in.heating_fuel', 'Unknown'),
+                'cooling_type': twin.get('in.hvac_cooling_type', 'Unknown'),
+                'monthly_usage': int(twin.get('monthly_kwh', 900)),
+                'climate_zone': twin.get('in.ashrae_iecc_climate_zone_2004', 'Unknown'),
+                'similarity_score': twin.get('similarity_score', 0),
+            }
+            twins_formatted.append(twin_formatted)
+        
         # Convert all numpy types to native Python types for JSON serialization
         user_home_clean = convert_to_json_serializable(user_home)
-        similar_homes_clean = convert_to_json_serializable(similar_homes)
+        twins_clean = convert_to_json_serializable(twins_formatted)
         insights_clean = convert_to_json_serializable(insights)
         
         return jsonify({
             'success': True,
             'user_profile': user_home_clean,
-            'twins': similar_homes_clean,
+            'twins': twins_clean,
             'insights': insights_clean
         })
         

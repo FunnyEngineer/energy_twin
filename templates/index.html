@@ -6,6 +6,8 @@
     <title>Find Your Energy Twins - Global Energy Visualization</title>
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -28,7 +30,7 @@
     <section class="hero">
         <div class="container">
             <h2 class="hero-title">Discover Homes with Similar Energy Patterns</h2>
-            <p class="hero-subtitle">Explore global energy usage in real-time and find your energy twins using AI</p>
+            <p class="hero-subtitle">Explore energy usage from 549,971 U.S. homes and find your energy twins using AI</p>
             <button class="cta-button" onclick="scrollToQuestionnaire()">Get Started</button>
         </div>
     </section>
@@ -36,21 +38,30 @@
     <!-- Global Visualization Section -->
     <section id="map" class="map-section">
         <div class="container">
-            <h2 class="section-title">Global Energy & Weather Live Map</h2>
+            <h2 class="section-title">U.S. Residential Energy Map</h2>
             <div class="stats-bar">
                 <div class="stat-item">
                     <span class="stat-label">Total Homes Tracked</span>
-                    <span class="stat-value" id="total-homes">--</span>
+                    <span class="stat-value" id="total-homes">{{ stats.total_homes }}</span>
                 </div>
                 <div class="stat-item">
                     <span class="stat-label">Average Energy Usage</span>
-                    <span class="stat-value" id="avg-energy">--</span>
+                    <span class="stat-value" id="avg-energy">{{ stats.avg_energy }}</span>
                 </div>
                 <div class="stat-item">
                     <span class="stat-label">U.S. Cities</span>
-                    <span class="stat-value" id="cities">--</span>
+                    <span class="stat-value" id="cities">{{ stats.cities }}</span>
                 </div>
             </div>
+            
+            <!-- Map loading indicator -->
+            <div id="map-loading" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                <div style="text-align: center;">
+                    <div class="spinner" style="margin: 0 auto 1rem;"></div>
+                    <p style="margin: 0; font-weight: 600;">Loading map data...</p>
+                </div>
+            </div>
+            
             <div id="map-container" class="map-container"></div>
             <div class="map-legend">
                 <h4>Energy Usage Legend</h4>
@@ -81,8 +92,8 @@
             <form id="energy-form" class="energy-form">
                 <div class="form-grid">
                     <div class="form-group">
-                        <label for="location">📍 Location (City, Country)</label>
-                        <input type="text" id="location" name="location" required placeholder="e.g., San Francisco, USA">
+                        <label for="location">📍 Location (City, State)</label>
+                        <input type="text" id="location" name="location" required placeholder="e.g., Denver, CO">
                     </div>
 
                     <div class="form-group">
@@ -96,7 +107,7 @@
                             <option value="">Select...</option>
                             <option value="1">1 Bedroom</option>
                             <option value="2">2 Bedrooms</option>
-                            <option value="3">3 Bedrooms</option>
+                            <option value="3" selected>3 Bedrooms</option>
                             <option value="4">4 Bedrooms</option>
                             <option value="5">5+ Bedrooms</option>
                         </select>
@@ -104,40 +115,73 @@
 
                     <div class="form-group">
                         <label for="occupants">👥 Number of Occupants</label>
-                        <input type="number" id="occupants" name="occupants" required min="1" placeholder="e.g., 3">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="home-type">🏡 Home Type</label>
-                        <select id="home-type" name="home_type" required>
+                        <select id="occupants" name="occupants" required>
                             <option value="">Select...</option>
-                            <option value="apartment">Apartment</option>
-                            <option value="house">Single Family House</option>
-                            <option value="townhouse">Townhouse</option>
-                            <option value="condo">Condominium</option>
+                            <option value="1">1 Person</option>
+                            <option value="2" selected>2 People</option>
+                            <option value="3">3 People</option>
+                            <option value="4">4 People</option>
+                            <option value="5">5+ People</option>
                         </select>
                     </div>
 
                     <div class="form-group">
-                        <label for="heating">🔥 Primary Heating</label>
-                        <select id="heating" name="heating_type" required>
+                        <label for="building-type">🏡 Building Type</label>
+                        <select id="building-type" name="building_type" required>
                             <option value="">Select...</option>
-                            <option value="electric">Electric</option>
-                            <option value="gas">Natural Gas</option>
-                            <option value="oil">Oil</option>
-                            <option value="heat_pump">Heat Pump</option>
-                            <option value="other">Other</option>
+                            <option value="Single-Family Detached" selected>Single-Family Home (Detached)</option>
+                            <option value="Single-Family Attached">Townhouse/Condo</option>
+                            <option value="2 Unit">Duplex (2 units)</option>
+                            <option value="3 or 4 Unit">Small Apartment Building (3-4 units)</option>
+                            <option value="5 to 9 Unit">Medium Apartment Building (5-9 units)</option>
+                            <option value="10 to 19 Unit">Large Apartment Building (10-19 units)</option>
+                            <option value="20 to 49 Unit">Large Apartment Complex (20-49 units)</option>
+                            <option value="50 or more Unit">High-Rise Apartment (50+ units)</option>
+                            <option value="Mobile Home">Mobile/Manufactured Home</option>
                         </select>
                     </div>
 
                     <div class="form-group">
-                        <label for="cooling">❄️ Cooling System</label>
+                        <label for="heating">🔥 Primary Heating Fuel</label>
+                        <select id="heating" name="heating_fuel" required>
+                            <option value="">Select...</option>
+                            <option value="Natural Gas">Natural Gas</option>
+                            <option value="Electricity" selected>Electricity</option>
+                            <option value="Fuel Oil">Fuel Oil</option>
+                            <option value="Propane">Propane</option>
+                            <option value="Other Fuel">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cooling">❄️ Cooling System Type</label>
                         <select id="cooling" name="cooling_type" required>
                             <option value="">Select...</option>
-                            <option value="central_ac">Central AC</option>
-                            <option value="window_ac">Window Units</option>
-                            <option value="heat_pump">Heat Pump</option>
-                            <option value="none">None</option>
+                            <option value="Central AC" selected>Central AC</option>
+                            <option value="Room AC">Room/Window AC</option>
+                            <option value="Heat Pump">Heat Pump</option>
+                            <option value="None">No AC</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="climate-zone">🌡️ Climate Zone</label>
+                        <select id="climate-zone" name="climate_zone" required>
+                            <option value="">Select...</option>
+                            <option value="1A">1A - Very Hot-Humid (Miami, FL)</option>
+                            <option value="2A">2A - Hot-Humid (Houston, TX)</option>
+                            <option value="2B">2B - Hot-Dry (Phoenix, AZ)</option>
+                            <option value="3A">3A - Warm-Humid (Atlanta, GA)</option>
+                            <option value="3B">3B - Warm-Dry (Las Vegas, NV)</option>
+                            <option value="3C">3C - Warm-Marine (San Francisco, CA)</option>
+                            <option value="4A" selected>4A - Mixed-Humid (NYC, DC)</option>
+                            <option value="4B">4B - Mixed-Dry (Albuquerque, NM)</option>
+                            <option value="4C">4C - Mixed-Marine (Seattle, WA)</option>
+                            <option value="5A">5A - Cool-Humid (Chicago, IL)</option>
+                            <option value="5B">5B - Cool-Dry (Denver, CO)</option>
+                            <option value="6A">6A - Cold-Humid (Minneapolis, MN)</option>
+                            <option value="6B">6B - Cold-Dry (Montana)</option>
+                            <option value="7">7 - Very Cold (Alaska)</option>
                         </select>
                     </div>
 
@@ -231,6 +275,7 @@
 
     <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="/static/js/app.js"></script>
 </body>

@@ -35,17 +35,17 @@ class ResStockDataLoader:
         print("   This may take a few minutes for the first download...")
         print("   Using sample-based approach with validated ResStock distributions")
     
-    def download_sample_metadata(self, output_file='data/homes_data.parquet', num_samples=1000):
+    def download_sample_metadata(self, output_file='data/homes_data.parquet', num_samples=None):
         """
-        Download and process ResStock data, or generate fallback data
+        Download and process ResStock data - ALL DATA by default
         
         Args:
             output_file: Path to save the parquet file
-            num_samples: Number of homes to generate
+            num_samples: Number of homes to sample (None = use all data)
         """
-        print("Loading ResStock-based residential building data...")
+        print("Loading ResStock residential building data...")
         
-        # Try to download actual ResStock data (may require authentication)
+        # Try to download actual ResStock data
         df = None
         temp_file = 'data/temp_metadata.parquet'
         
@@ -53,35 +53,39 @@ class ResStockDataLoader:
             for url in self.metadata_urls:
                 try:
                     print(f"   Attempting: {url}")
-                    response = requests.get(url, stream=True, timeout=60)
+                    response = requests.get(url, stream=True, timeout=120)
                     
                     if response.status_code == 200:
                         os.makedirs('data', exist_ok=True)
                         
+                        print(f"   📥 Downloading ResStock data (this may take a few minutes)...")
                         with open(temp_file, 'wb') as f:
                             for chunk in response.iter_content(chunk_size=8192):
                                 f.write(chunk)
                         
                         df = pd.read_parquet(temp_file)
-                        print(f"   ✅ Downloaded {len(df):,} buildings")
+                        print(f"   ✅ Downloaded {len(df):,} buildings from ResStock")
                         break
                     else:
                         print(f"   ⚠️  Could not download metadata (HTTP {response.status_code})")
                 except Exception as e:
+                    print(f"   ⚠️  Error: {e}")
                     continue
-        except:
-            pass
+        except Exception as e:
+            print(f"   ⚠️  Download failed: {e}")
         
         # If we got real data, process it
         if df is not None and len(df) > 0:
-            # Sample from the real data
-            if len(df) > num_samples:
+            # Sample if requested, otherwise use ALL data
+            if num_samples and len(df) > num_samples:
+                print(f"   📊 Sampling {num_samples:,} buildings from {len(df):,} total")
                 df_sample = df.sample(n=num_samples, random_state=42)
             else:
+                print(f"   📊 Using ALL {len(df):,} buildings")
                 df_sample = df
             
-            # Process and clean the data
-            homes_df = self._process_resstock_data(df_sample)
+            # Process with MINIMAL transformation - keep ResStock structure
+            homes_df = self._process_resstock_native(df_sample)
             
             # Save as parquet
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -91,14 +95,87 @@ class ResStockDataLoader:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             
-            print(f"   ✅ Processed and saved {len(homes_df)} homes to {output_file}")
+            print(f"   ✅ Processed and saved {len(homes_df):,} homes to {output_file}")
             return homes_df
         else:
             # Generate fallback data based on ResStock distributions
-            print("   Generating sample data based on ResStock distributions...")
-            return self._create_fallback_data(num_samples, output_file)
+            print("   ⚠️  No real data available. Generating fallback data...")
+            return self._create_fallback_data(num_samples or 1000, output_file)
                 
-    def _process_resstock_data(self, df):
+    def _process_resstock_native(self, df):
+        """
+        Process ResStock data with MINIMAL transformation
+        Keep ResStock's native structure and column names
+        Only add essential fields for the app to function
+        """
+        print(f"   Processing {len(df):,} buildings (keeping ResStock native format)...")
+        
+        # Find electricity consumption column
+        elec_cols = [col for col in df.columns if 'out.electricity.total.energy_consumption' in col and 'intensity' not in col]
+        total_elec_col = elec_cols[0] if elec_cols else None
+        
+        # Select essential ResStock columns + add computed fields
+        essential_columns = [
+            'bldg_id',
+            'in.state',
+            'in.county_name',
+            'in.city',
+            'in.weather_file_city',
+            'in.weather_file_latitude',
+            'in.weather_file_longitude',
+            'in.sqft..ft2',
+            'in.bedrooms',
+            'in.occupants',
+            'in.geometry_building_type_acs',
+            'in.heating_fuel',
+            'in.hvac_cooling_type',
+            'in.hvac_cooling_efficiency',
+            'in.has_pv',
+            'in.pv_system_size',
+            'in.ashrae_iecc_climate_zone_2004',
+            'in.building_america_climate_zone',
+        ]
+        
+        # Add electricity column if found
+        if total_elec_col:
+            essential_columns.append(total_elec_col)
+        
+        # Keep only columns that exist
+        available_columns = [col for col in essential_columns if col in df.columns]
+        df_subset = df[available_columns].copy()
+        
+        # Add ONLY essential computed fields (no transformations!)
+        # 1. Display location (for map popup)
+        df_subset['display_location'] = df_subset.apply(
+            lambda row: f"{row.get('in.weather_file_city', row.get('in.city', row.get('in.county_name', 'Unknown')))}, {row.get('in.state', 'USA')}",
+            axis=1
+        )
+        
+        # 2. Monthly electricity usage (for comparison)
+        if total_elec_col:
+            df_subset['monthly_kwh'] = (df_subset[total_elec_col] / 12).fillna(900)
+        else:
+            df_subset['monthly_kwh'] = 900
+        
+        # 3. Clean has_solar (convert 'Yes'/'No' to boolean)
+        if 'in.has_pv' in df_subset.columns:
+            df_subset['has_solar_panel'] = df_subset['in.has_pv'].apply(
+                lambda x: True if str(x).lower() == 'yes' else False
+            )
+        
+        # Handle missing values - fill with ResStock defaults, NO transformation
+        df_subset['in.sqft..ft2'] = df_subset['in.sqft..ft2'].fillna(1500)
+        df_subset['in.bedrooms'] = df_subset['in.bedrooms'].fillna(3)
+        df_subset['in.occupants'] = df_subset['in.occupants'].apply(
+            lambda x: int(str(x).replace('+', '')) if pd.notna(x) else 2
+        )
+        df_subset['in.weather_file_latitude'] = df_subset['in.weather_file_latitude'].fillna(39.8)
+        df_subset['in.weather_file_longitude'] = df_subset['in.weather_file_longitude'].fillna(-98.5)
+        
+        print(f"   ✅ Processed {len(df_subset):,} buildings with native ResStock structure")
+        print(f"   📊 Columns retained: {len(df_subset.columns)}")
+        
+        return df_subset
         """
         Process real ResStock data into our format
         Maps ResStock column names to our application's schema
@@ -206,9 +283,6 @@ class ResStockDataLoader:
             except Exception as e:
                 # Skip rows with errors (but don't print - too many)
                 continue
-        
-        print(f"   ✅ Successfully processed {len(processed_homes):,} homes")
-        return pd.DataFrame(processed_homes)
     
     def _map_building_type(self, resstock_type):
         """Map ResStock building types to our simplified types"""
@@ -503,13 +577,14 @@ class ResStockDataLoader:
 
 if __name__ == '__main__':
     loader = ResStockDataLoader()
-    homes_df = loader.download_sample_metadata('data/homes_data.parquet', num_samples=1000)
-    print(f"\n✅ Successfully created {len(homes_df)} homes using ResStock methodology")
-    print(f"📊 Data includes:")
-    print(f"   • Real U.S. climate zones and cities")
-    print(f"   • Validated building type distributions (RECS data)")
-    print(f"   • Authentic heating/cooling system prevalence")
-    print(f"   • ResStock-based energy calculation models")
+    # Use ALL data (no sampling) - set num_samples=1000 for testing
+    homes_df = loader.download_sample_metadata('data/homes_data.parquet', num_samples=None)
+    print(f"\n✅ Successfully loaded {len(homes_df):,} homes from ResStock")
+    print(f"📊 Data structure:")
+    print(f"   • Native ResStock columns preserved")
+    print(f"   • Minimal transformation applied")
+    print(f"   • All baseline buildings included")
     print(f"\n💾 Data saved as: data/homes_data.parquet")
-    print(f"📈 Sample home:\n{homes_df.iloc[0].to_dict()}")
+    print(f"\n📈 Columns available: {list(homes_df.columns)}")
+    print(f"\n🏠 Sample home:\n{homes_df.iloc[0].to_dict()}")
     print("="*70)

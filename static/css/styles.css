@@ -217,6 +217,8 @@ section {
     padding: 3rem;
     border-radius: 12px;
     box-shadow: var(--shadow-lg);
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 .form-grid {
@@ -256,6 +258,7 @@ section {
 
 .submit-button {
     width: 100%;
+    max-width: 100%;  /* Prevent overflow */
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     color: white;
     border: none;
@@ -265,11 +268,53 @@ section {
     border-radius: 8px;
     cursor: pointer;
     transition: transform 0.3s, box-shadow 0.3s;
+    box-sizing: border-box;  /* Include padding in width calculation */
 }
 
 .submit-button:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
+}
+
+/* Marker Cluster Styling */
+.marker-cluster-small {
+    background-color: rgba(46, 204, 113, 0.6);
+}
+.marker-cluster-small div {
+    background-color: rgba(46, 204, 113, 0.8);
+}
+
+.marker-cluster-medium {
+    background-color: rgba(243, 156, 18, 0.6);
+}
+.marker-cluster-medium div {
+    background-color: rgba(243, 156, 18, 0.8);
+}
+
+.marker-cluster-large {
+    background-color: rgba(231, 76, 60, 0.6);
+}
+.marker-cluster-large div {
+    background-color: rgba(231, 76, 60, 0.8);
+}
+
+.marker-cluster {
+    background-clip: padding-box;
+    border-radius: 50%;
+}
+.marker-cluster div {
+    width: 30px;
+    height: 30px;
+    margin-left: 5px;
+    margin-top: 5px;
+    text-align: center;
+    border-radius: 50%;
+    font: 12px "Helvetica Neue", Arial, Helvetica, sans-serif;
+    font-weight: bold;
+    color: white;
+}
+.marker-cluster span {
+    line-height: 30px;
 }
 
 /* Results Section */
@@ -459,6 +504,15 @@ section {
 
     .form-grid {
         grid-template-columns: 1fr;
+    }
+    
+    .energy-form {
+        padding: 1.5rem;
+    }
+    
+    .submit-button {
+        font-size: 1rem;
+        padding: 1rem;
     }
 
     .twins-container {

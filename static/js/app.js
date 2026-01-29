@@ -1,6 +1,6 @@
 // Global variables
 let map;
-let markers = [];
+let markerCluster;  // For clustering large datasets
 let homesData = [];
 
 // Initialize the application
@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupFormSubmission();
 });
 
-// Initialize Leaflet map
+// Initialize Leaflet map with marker clustering
 function initMap() {
     // Center on the United States
     map = L.map('map-container').setView([37.8, -96], 4);
@@ -19,57 +19,117 @@ function initMap() {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 18,
     }).addTo(map);
+    
+    // Initialize marker cluster group with custom options
+    markerCluster = L.markerClusterGroup({
+        chunkedLoading: true,
+        chunkInterval: 200,
+        chunkDelay: 50,
+        maxClusterRadius: 80,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        iconCreateFunction: function(cluster) {
+            const childCount = cluster.getChildCount();
+            let size = 'small';
+            let c = ' marker-cluster-';
+            
+            if (childCount < 100) {
+                size = 'small';
+            } else if (childCount < 1000) {
+                size = 'medium';
+            } else {
+                size = 'large';
+            }
+            
+            return new L.DivIcon({
+                html: '<div><span>' + childCount.toLocaleString() + '</span></div>',
+                className: 'marker-cluster' + c + size,
+                iconSize: new L.Point(40, 40)
+            });
+        }
+    });
+    
+    map.addLayer(markerCluster);
 }
 
 // Load global energy data and display on map
 async function loadGlobalData() {
+    console.log('🔄 Loading map data...');
+    const startTime = performance.now();
+    
+    // Show loading indicator
+    const loadingEl = document.getElementById('map-loading');
+    if (loadingEl) loadingEl.style.display = 'block';
+    
     try {
         const response = await fetch('/api/global-data');
         const data = await response.json();
         
         if (data.success) {
+            const loadTime = Math.round(performance.now() - startTime);
+            console.log(`✅ Loaded ${data.homes.length.toLocaleString()} homes in ${loadTime}ms`);
+            
+            if (data.sample_info) {
+                console.log(`ℹ️  ${data.sample_info.note}`);
+            }
+            
             homesData = data.homes;
-            updateStats(data.stats);
+            
+            // Stats are preloaded in HTML, but update if needed
+            if (data.stats) {
+                updateStats(data.stats);
+            }
+            
             displayHomesOnMap(data.homes);
         }
     } catch (error) {
-        console.error('Error loading global data:', error);
+        console.error('❌ Error loading global data:', error);
+    } finally {
+        // Hide loading indicator
+        if (loadingEl) loadingEl.style.display = 'none';
     }
 }
 
 // Update statistics in the stats bar
 function updateStats(stats) {
     document.getElementById('total-homes').textContent = stats.total_homes.toLocaleString();
-    document.getElementById('avg-energy').textContent = `${Math.round(stats.avg_energy)} kWh`;
-    document.getElementById('cities').textContent = stats.cities;
+    document.getElementById('avg-energy').textContent = `${Math.round(stats.avg_energy)} kWh/month`;
+    document.getElementById('cities').textContent = stats.cities.toLocaleString();
 }
 
-// Display homes on the map with markers
+// Display homes on the map with clustering
 function displayHomesOnMap(homes) {
+    const startTime = performance.now();
+    
     // Clear existing markers
-    markers.forEach(marker => map.removeLayer(marker));
-    markers = [];
+    markerCluster.clearLayers();
+    
+    console.log(`🗺️  Adding ${homes.length.toLocaleString()} homes to map...`);
+    
+    // Batch add markers for better performance
+    const markers = [];
     
     homes.forEach(home => {
-        const color = getEnergyColor(home.monthly_usage);
+        const color = getEnergyColor(home.usage);
         
-        const marker = L.circleMarker([home.latitude, home.longitude], {
-            radius: 8,
+        const marker = L.circleMarker([home.lat, home.lon], {
+            radius: 6,
             fillColor: color,
             color: '#fff',
-            weight: 2,
+            weight: 1,
             opacity: 1,
-            fillOpacity: 0.8
-        }).addTo(map);
+            fillOpacity: 0.7
+        });
         
-        // Create popup content
+        // Create popup content with new field names
         const popupContent = `
             <div style="min-width: 200px;">
-                <h3 style="margin: 0 0 10px 0;">${home.location}</h3>
-                <p style="margin: 5px 0;"><strong>Energy Usage:</strong> ${home.monthly_usage} kWh/month</p>
-                <p style="margin: 5px 0;"><strong>Temperature:</strong> ${home.temperature}°C</p>
-                <p style="margin: 5px 0;"><strong>Home Type:</strong> ${capitalizeFirst(home.home_type)}</p>
-                <p style="margin: 5px 0;"><strong>Size:</strong> ${home.home_size} sq ft</p>
+                <h3 style="margin: 0 0 10px 0; font-size: 1rem;">${home.location}</h3>
+                <p style="margin: 5px 0;"><strong>Energy Usage:</strong> ${home.usage.toLocaleString()} kWh/month</p>
+                <p style="margin: 5px 0;"><strong>Building Type:</strong> ${home.type}</p>
+                <p style="margin: 5px 0;"><strong>Size:</strong> ${home.size.toLocaleString()} sq ft</p>
+                <p style="margin: 5px 0;"><strong>Bedrooms:</strong> ${home.beds}</p>
                 <p style="margin: 5px 0;"><strong>Occupants:</strong> ${home.occupants}</p>
             </div>
         `;
@@ -77,6 +137,12 @@ function displayHomesOnMap(homes) {
         marker.bindPopup(popupContent);
         markers.push(marker);
     });
+    
+    // Add all markers at once (faster than individual adds)
+    markerCluster.addLayers(markers);
+    
+    const renderTime = Math.round(performance.now() - startTime);
+    console.log(`✅ Map clustering complete in ${renderTime}ms`);
 }
 
 // Get color based on energy usage
@@ -153,18 +219,32 @@ function displayResults(userProfile, twins, insights) {
 // Display user profile
 function displayUserProfile(profile) {
     const container = document.getElementById('user-profile');
+    
+    // Handle ResStock native format
+    const location = profile.display_location || profile.location || 'Unknown';
+    const homeSize = profile['in.sqft..ft2'] || profile.home_size || 0;
+    const bedrooms = profile['in.bedrooms'] || profile.bedrooms || 0;
+    const occupants = profile['in.occupants'] || profile.occupants || 0;
+    const buildingType = profile['in.geometry_building_type_acs'] || profile.building_type || 'Unknown';
+    const heatingFuel = profile['in.heating_fuel'] || profile.heating_fuel || 'Unknown';
+    const coolingType = profile['in.hvac_cooling_type'] || profile.cooling_type || 'Unknown';
+    const hasSolar = profile.has_solar_panel || profile.has_solar === 'yes' ? 'Yes' : 'No';
+    const monthlyUsage = profile.monthly_kwh || profile.monthly_usage;
+    const climateZone = profile['in.ashrae_iecc_climate_zone_2004'] || profile.climate_zone || 'Unknown';
+    
     container.innerHTML = `
         <h3 style="margin-bottom: 1rem; font-size: 1.5rem;">Your Home Profile</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-            <div><strong>Location:</strong> ${profile.location}</div>
-            <div><strong>Home Size:</strong> ${profile.home_size} sq ft</div>
-            <div><strong>Bedrooms:</strong> ${profile.bedrooms}</div>
-            <div><strong>Occupants:</strong> ${profile.occupants}</div>
-            <div><strong>Home Type:</strong> ${capitalizeFirst(profile.home_type)}</div>
-            <div><strong>Heating:</strong> ${capitalizeFirst(profile.heating_type.replace('_', ' '))}</div>
-            <div><strong>Cooling:</strong> ${capitalizeFirst(profile.cooling_type.replace('_', ' '))}</div>
-            <div><strong>Solar:</strong> ${profile.has_solar === 'yes' ? 'Yes' : 'No'}</div>
-            ${profile.monthly_usage ? `<div><strong>Monthly Usage:</strong> ${profile.monthly_usage} kWh</div>` : ''}
+            <div><strong>Location:</strong> ${location}</div>
+            <div><strong>Home Size:</strong> ${Math.round(homeSize)} sq ft</div>
+            <div><strong>Bedrooms:</strong> ${bedrooms}</div>
+            <div><strong>Occupants:</strong> ${occupants}</div>
+            <div><strong>Building Type:</strong> ${buildingType}</div>
+            <div><strong>Heating Fuel:</strong> ${heatingFuel}</div>
+            <div><strong>Cooling:</strong> ${coolingType}</div>
+            <div><strong>Climate Zone:</strong> ${climateZone}</div>
+            <div><strong>Solar:</strong> ${hasSolar}</div>
+            ${monthlyUsage ? `<div><strong>Monthly Usage:</strong> ${Math.round(monthlyUsage)} kWh</div>` : ''}
         </div>
     `;
 }
@@ -188,18 +268,17 @@ function displayTwins(twins) {
             </div>
             <div style="background: #f5f7fa; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
                 <div style="font-size: 1.5rem; font-weight: 700; color: ${getEnergyColor(twin.monthly_usage)};">
-                    ${twin.monthly_usage} kWh/month
+                    ${twin.monthly_usage.toLocaleString()} kWh/month
                 </div>
             </div>
             <div class="twin-details">
-                <div class="detail-item"><strong>Size:</strong> ${twin.home_size} sq ft</div>
-                <div class="detail-item"><strong>Type:</strong> ${capitalizeFirst(twin.home_type)}</div>
+                <div class="detail-item"><strong>Size:</strong> ${twin.home_size.toLocaleString()} sq ft</div>
+                <div class="detail-item"><strong>Type:</strong> ${twin.building_type}</div>
                 <div class="detail-item"><strong>Bedrooms:</strong> ${twin.bedrooms}</div>
                 <div class="detail-item"><strong>Occupants:</strong> ${twin.occupants}</div>
-                <div class="detail-item"><strong>Heating:</strong> ${capitalizeFirst(twin.heating_type.replace('_', ' '))}</div>
-                <div class="detail-item"><strong>Cooling:</strong> ${capitalizeFirst(twin.cooling_type.replace('_', ' '))}</div>
-                <div class="detail-item"><strong>Solar:</strong> ${twin.has_solar ? 'Yes' : 'No'}</div>
-                <div class="detail-item"><strong>Temperature:</strong> ${twin.temperature}°C</div>
+                <div class="detail-item"><strong>Heating:</strong> ${twin.heating_fuel}</div>
+                <div class="detail-item"><strong>Cooling:</strong> ${twin.cooling_type}</div>
+                <div class="detail-item"><strong>Climate:</strong> ${twin.climate_zone}</div>
             </div>
         `;
         container.appendChild(card);
