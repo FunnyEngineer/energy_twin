@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find Your Energy Twins - Global Energy Visualization</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <h1>Find Your Energy Twins</h1>
+            </div>
+            <nav>
+                <a href="#map" class="nav-link">Explore</a>
+                <a href="#questionnaire" class="nav-link">Find Twins</a>
+                <a href="#about" class="nav-link">About</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h2 class="hero-title">Discover Homes with Similar Energy Patterns</h2>
+            <p class="hero-subtitle">Explore global energy usage in real-time and find your energy twins using AI</p>
+            <button class="cta-button" onclick="scrollToQuestionnaire()">Get Started</button>
+        </div>
+    </section>
+
+    <!-- Global Visualization Section -->
+    <section id="map" class="map-section">
+        <div class="container">
+            <h2 class="section-title">Global Energy & Weather Live Map</h2>
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <span class="stat-label">Total Homes Tracked</span>
+                    <span class="stat-value" id="total-homes">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Average Energy Usage</span>
+                    <span class="stat-value" id="avg-energy">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">U.S. Cities</span>
+                    <span class="stat-value" id="cities">--</span>
+                </div>
+            </div>
+            <div id="map-container" class="map-container"></div>
+            <div class="map-legend">
+                <h4>Energy Usage Legend</h4>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #2ecc71;"></span>
+                        <span>Low (&lt; 500 kWh/month)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #f39c12;"></span>
+                        <span>Medium (500-1000 kWh/month)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #e74c3c;"></span>
+                        <span>High (&gt; 1000 kWh/month)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Questionnaire Section -->
+    <section id="questionnaire" class="questionnaire-section">
+        <div class="container">
+            <h2 class="section-title">Find Your Energy Twins</h2>
+            <p class="section-subtitle">Answer a few questions about your home to discover similar energy patterns</p>
+            
+            <form id="energy-form" class="energy-form">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="location">📍 Location (City, Country)</label>
+                        <input type="text" id="location" name="location" required placeholder="e.g., San Francisco, USA">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="home-size">🏠 Home Size (sq ft)</label>
+                        <input type="number" id="home-size" name="home_size" required placeholder="e.g., 1500">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bedrooms">🛏️ Number of Bedrooms</label>
+                        <select id="bedrooms" name="bedrooms" required>
+                            <option value="">Select...</option>
+                            <option value="1">1 Bedroom</option>
+                            <option value="2">2 Bedrooms</option>
+                            <option value="3">3 Bedrooms</option>
+                            <option value="4">4 Bedrooms</option>
+                            <option value="5">5+ Bedrooms</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="occupants">👥 Number of Occupants</label>
+                        <input type="number" id="occupants" name="occupants" required min="1" placeholder="e.g., 3">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="home-type">🏡 Home Type</label>
+                        <select id="home-type" name="home_type" required>
+                            <option value="">Select...</option>
+                            <option value="apartment">Apartment</option>
+                            <option value="house">Single Family House</option>
+                            <option value="townhouse">Townhouse</option>
+                            <option value="condo">Condominium</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="heating">🔥 Primary Heating</label>
+                        <select id="heating" name="heating_type" required>
+                            <option value="">Select...</option>
+                            <option value="electric">Electric</option>
+                            <option value="gas">Natural Gas</option>
+                            <option value="oil">Oil</option>
+                            <option value="heat_pump">Heat Pump</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cooling">❄️ Cooling System</label>
+                        <select id="cooling" name="cooling_type" required>
+                            <option value="">Select...</option>
+                            <option value="central_ac">Central AC</option>
+                            <option value="window_ac">Window Units</option>
+                            <option value="heat_pump">Heat Pump</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="solar">☀️ Solar Panels?</label>
+                        <select id="solar" name="has_solar" required>
+                            <option value="">Select...</option>
+                            <option value="yes">Yes</option>
+                            <option value="no">No</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="monthly-usage">⚡ Monthly Energy Usage (kWh)</label>
+                        <input type="number" id="monthly-usage" name="monthly_usage" placeholder="Optional - if known">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="k-value">🔢 Number of Similar Homes to Find</label>
+                        <select id="k-value" name="k_value">
+                            <option value="5">Top 5</option>
+                            <option value="10" selected>Top 10</option>
+                            <option value="15">Top 15</option>
+                            <option value="20">Top 20</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-button">Find My Energy Twins 🔍</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Results Section -->
+    <section id="results" class="results-section" style="display: none;">
+        <div class="container">
+            <h2 class="section-title">Your Energy Twins</h2>
+            <div id="user-profile" class="user-profile"></div>
+            <div id="twins-container" class="twins-container"></div>
+            <div id="insights" class="insights-section"></div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="about-section">
+        <div class="container">
+            <h2 class="section-title">About Energy Twins</h2>
+            <div class="about-grid">
+                <div class="about-card">
+                    <div class="about-icon">🌍</div>
+                    <h3>Real ResStock Data</h3>
+                    <p>We use data based on NREL's ResStock - the U.S. Department of Energy's comprehensive residential building stock model with validated energy calculations and real climate distributions.</p>
+                </div>
+                <div class="about-card">
+                    <div class="about-icon">🤖</div>
+                    <h3>AI-Powered Matching</h3>
+                    <p>Our machine learning algorithm finds homes with similar energy patterns by analyzing building characteristics, climate zones, and energy usage from real U.S. residential data.</p>
+                </div>
+                <div class="about-card">
+                    <div class="about-icon">💡</div>
+                    <h3>Energy Insights</h3>
+                    <p>Discover how your energy usage compares with similar homes and get personalized recommendations based on ResStock's validated building energy models.</p>
+                </div>
+            </div>
+            <div style="margin-top: 3rem; text-align: center; padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h3 style="margin-bottom: 1rem;">Data Source: NREL ResStock</h3>
+                <p style="color: #666; line-height: 1.8; max-width: 800px; margin: 0 auto;">
+                    ResStock™ is a highly granular, bottom-up model of the U.S. residential building stock developed by the National Laboratory of the Rockies (NLR) for the U.S. Department of Energy. 
+                    It combines multiple data sources including the Residential Energy Consumption Survey (RECS), statistical sampling methods, and advanced building energy simulations 
+                    to represent the entire U.S. housing stock circa 2018.
+                </p>
+                <p style="margin-top: 1rem;">
+                    <a href="https://resstock.nrel.gov/" target="_blank" style="color: #3498db; text-decoration: none; font-weight: 600;">Learn more about ResStock →</a>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Find Your Energy Twins. Data powered by <a href="https://resstock.nrel.gov/" target="_blank" style="color: #2ecc71; text-decoration: none;">NREL ResStock</a> - U.S. Department of Energy.</p>
+        </div>
+    </footer>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+        <p>Finding your energy twins...</p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
