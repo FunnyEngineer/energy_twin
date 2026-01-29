@@ -47,23 +47,41 @@ def load_homes_data():
     """Load homes data from parquet file"""
     global HOMES_DATA
     
-    if os.path.exists(DATA_FILE):
-        import pandas as pd
-        df = pd.read_parquet(DATA_FILE)
-        HOMES_DATA = df.to_dict('records')
-        print(f"✅ Loaded {len(HOMES_DATA)} homes from ResStock parquet dataset")
-        
-        # Train the ML model
-        ml_matcher.fit(HOMES_DATA)
-        print("🤖 ML model trained successfully on ResStock data")
-    else:
-        print("📥 No data file found. Loading ResStock data from NREL...")
-        from resstock_loader import ResStockDataLoader
-        loader = ResStockDataLoader()
-        df = loader.download_sample_metadata(DATA_FILE, num_samples=1000)
-        HOMES_DATA = df.to_dict('records')
-        ml_matcher.fit(HOMES_DATA)
-        print("✅ ResStock data loaded and ML model trained")
+    try:
+        if os.path.exists(DATA_FILE):
+            import pandas as pd
+            df = pd.read_parquet(DATA_FILE)
+            HOMES_DATA = df.to_dict('records')
+            print(f"✅ Loaded {len(HOMES_DATA)} homes from ResStock parquet dataset")
+            
+            # Train the ML model
+            if len(HOMES_DATA) > 0:
+                ml_matcher.fit(HOMES_DATA)
+                print("🤖 ML model trained successfully on ResStock data")
+            else:
+                print("⚠️  Warning: Data file is empty!")
+        else:
+            print("📥 No data file found. Generating ResStock data...")
+            print(f"📂 Looking for: {os.path.abspath(DATA_FILE)}")
+            print(f"📂 Current directory: {os.getcwd()}")
+            print(f"📂 Directory exists: {os.path.exists('data/')}")
+            
+            from resstock_loader import ResStockDataLoader
+            loader = ResStockDataLoader()
+            df = loader.download_sample_metadata(DATA_FILE, num_samples=1000)
+            HOMES_DATA = df.to_dict('records')
+            
+            if len(HOMES_DATA) > 0:
+                ml_matcher.fit(HOMES_DATA)
+                print("✅ ResStock data generated and ML model trained")
+            else:
+                print("❌ Failed to generate data!")
+    except Exception as e:
+        print(f"❌ Error loading data: {e}")
+        import traceback
+        traceback.print_exc()
+        # Create minimal fallback data so app doesn't crash
+        HOMES_DATA = []
 
 
 @app.route('/')
