@@ -361,6 +361,11 @@ section {
     border-radius: 20px;
     font-weight: 600;
     font-size: 0.9rem;
+    transition: right 0.3s ease;
+}
+
+.twin-card.expanded .similarity-badge {
+    right: 2.5rem;
 }
 
 .twin-header {
@@ -526,4 +531,193 @@ section {
     .nav-link {
         font-size: 0.9rem;
     }
+}
+
+/* Expanding Card Styles */
+.twins-container {
+    position: relative;
+}
+
+.twin-card {
+    cursor: pointer;
+    position: relative;
+    transition: grid-column 0.6s, margin-bottom 0.6s, box-shadow 0.3s;
+}
+
+.twin-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.twin-card.moving-to-top {
+    order: -1;
+}
+
+.twin-card.expanded {
+    grid-column: 1 / -1;
+    order: -1;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.2);
+    cursor: default;
+    margin-bottom: 2rem;
+}
+
+.card-overlay {
+    display: none;
+}
+
+.twin-card .card-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.twin-card.expanded .card-content-wrapper {
+    flex-direction: row;
+    gap: 2rem;
+    align-items: flex-start;
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.twin-card .card-left {
+    width: 100%;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), flex 0.6s cubic-bezier(0.4, 0, 0.2, 1), border 0.6s, padding 0.6s;
+}
+
+.twin-card.expanded .card-left {
+    flex: 0 0 350px;
+    width: 350px;
+    border-right: 2px solid #e0e0e0;
+    padding-right: 2rem;
+}
+
+.twin-card .card-right {
+    display: none;
+}
+
+.twin-card.expanded .card-right {
+    display: block;
+    opacity: 0;
+    flex: 1;
+    min-width: 0;
+    max-height: 600px;
+    overflow-y: auto;
+    animation: fadeInRight 0.6s ease-in-out forwards;
+}
+
+@keyframes fadeInRight {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.close-expanded {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    font-size: 1.8rem;
+    color: #666;
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid #ddd;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+}
+
+.twin-card.expanded .close-expanded {
+    display: flex;
+}
+
+.close-expanded:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: #e74c3c;
+    color: #e74c3c;
+    transform: scale(1.15);
+}
+
+.chart-loading {
+    text-align: center;
+    padding: 3rem;
+    color: #666;
+}
+
+.tabs {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.tab-button {
+    background: none;
+    border: none;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #666;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s;
+}
+
+.tab-button:hover {
+    color: var(--primary-color);
+}
+
+.tab-button.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.tab-pane {
+    animation: fadeIn 0.3s;
+}
+
+.tab-pane canvas {
+    max-height: 450px;
+    width: 100% !important;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.timeseries-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.stat-card {
+    background: #ecf0f1;
+    padding: 1.25rem;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.stat-card h4 {
+    color: #7f8c8d;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.stat-card .value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #2c3e50;
 }

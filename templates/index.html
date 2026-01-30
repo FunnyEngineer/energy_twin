@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -93,21 +94,21 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="location">📍 Location (City, State)</label>
-                        <input type="text" id="location" name="location" required placeholder="e.g., Denver, CO">
+                        <input type="text" id="location" name="location" required placeholder="e.g., Denver, CO" {% if dev_defaults %}value="{{ dev_defaults.location }}"{% endif %}>
                     </div>
 
                     <div class="form-group">
                         <label for="home-size">🏠 Home Size (sq ft)</label>
-                        <input type="number" id="home-size" name="home_size" required placeholder="e.g., 1500">
+                        <input type="number" id="home-size" name="home_size" required placeholder="e.g., 1500" {% if dev_defaults %}value="{{ dev_defaults.home_size }}"{% endif %}>
                     </div>
 
                     <div class="form-group">
                         <label for="bedrooms">🛏️ Number of Bedrooms</label>
                         <select id="bedrooms" name="bedrooms" required>
                             <option value="">Select...</option>
-                            <option value="1">1 Bedroom</option>
-                            <option value="2">2 Bedrooms</option>
-                            <option value="3" selected>3 Bedrooms</option>
+                            <option value="1" {% if dev_defaults and dev_defaults.bedrooms == '1' %}selected{% endif %}>1 Bedroom</option>
+                            <option value="2" {% if not dev_defaults %}selected{% endif %}>2 Bedrooms</option>
+                            <option value="3" {% if dev_defaults and dev_defaults.bedrooms == '3' %}selected{% endif %}>3 Bedrooms</option>
                             <option value="4">4 Bedrooms</option>
                             <option value="5">5+ Bedrooms</option>
                         </select>
@@ -117,8 +118,8 @@
                         <label for="occupants">👥 Number of Occupants</label>
                         <select id="occupants" name="occupants" required>
                             <option value="">Select...</option>
-                            <option value="1">1 Person</option>
-                            <option value="2" selected>2 People</option>
+                            <option value="1" {% if dev_defaults and dev_defaults.occupants == '1' %}selected{% endif %}>1 Person</option>
+                            <option value="2" {% if not dev_defaults %}selected{% endif %}>2 People</option>
                             <option value="3">3 People</option>
                             <option value="4">4 People</option>
                             <option value="5">5+ People</option>
@@ -129,14 +130,14 @@
                         <label for="building-type">🏡 Building Type</label>
                         <select id="building-type" name="building_type" required>
                             <option value="">Select...</option>
-                            <option value="Single-Family Detached" selected>Single-Family Home (Detached)</option>
+                            <option value="Single-Family Detached" {% if not dev_defaults %}selected{% endif %}>Single-Family Home (Detached)</option>
                             <option value="Single-Family Attached">Townhouse/Condo</option>
                             <option value="2 Unit">Duplex (2 units)</option>
                             <option value="3 or 4 Unit">Small Apartment Building (3-4 units)</option>
                             <option value="5 to 9 Unit">Medium Apartment Building (5-9 units)</option>
                             <option value="10 to 19 Unit">Large Apartment Building (10-19 units)</option>
                             <option value="20 to 49 Unit">Large Apartment Complex (20-49 units)</option>
-                            <option value="50 or more Unit">High-Rise Apartment (50+ units)</option>
+                            <option value="50 or more Unit" {% if dev_defaults and dev_defaults.building_type == '50 or more Unit' %}selected{% endif %}>High-Rise Apartment (50+ units)</option>
                             <option value="Mobile Home">Mobile/Manufactured Home</option>
                         </select>
                     </div>
@@ -145,8 +146,8 @@
                         <label for="heating">🔥 Primary Heating Fuel</label>
                         <select id="heating" name="heating_fuel" required>
                             <option value="">Select...</option>
-                            <option value="Natural Gas">Natural Gas</option>
-                            <option value="Electricity" selected>Electricity</option>
+                            <option value="Natural Gas" {% if dev_defaults and dev_defaults.heating_fuel == 'Natural Gas' %}selected{% endif %}>Natural Gas</option>
+                            <option value="Electricity" {% if not dev_defaults %}selected{% endif %}>Electricity</option>
                             <option value="Fuel Oil">Fuel Oil</option>
                             <option value="Propane">Propane</option>
                             <option value="Other Fuel">Other</option>
@@ -169,12 +170,12 @@
                         <select id="climate-zone" name="climate_zone" required>
                             <option value="">Select...</option>
                             <option value="1A">1A - Very Hot-Humid (Miami, FL)</option>
-                            <option value="2A">2A - Hot-Humid (Houston, TX)</option>
+                            <option value="2A" {% if dev_defaults and dev_defaults.climate_zone == '2A' %}selected{% endif %}>2A - Hot-Humid (Houston, TX)</option>
                             <option value="2B">2B - Hot-Dry (Phoenix, AZ)</option>
                             <option value="3A">3A - Warm-Humid (Atlanta, GA)</option>
                             <option value="3B">3B - Warm-Dry (Las Vegas, NV)</option>
                             <option value="3C">3C - Warm-Marine (San Francisco, CA)</option>
-                            <option value="4A" selected>4A - Mixed-Humid (NYC, DC)</option>
+                            <option value="4A" {% if not dev_defaults %}selected{% endif %}>4A - Mixed-Humid (NYC, DC)</option>
                             <option value="4B">4B - Mixed-Dry (Albuquerque, NM)</option>
                             <option value="4C">4C - Mixed-Marine (Seattle, WA)</option>
                             <option value="5A">5A - Cool-Humid (Chicago, IL)</option>
@@ -190,7 +191,7 @@
                         <select id="solar" name="has_solar" required>
                             <option value="">Select...</option>
                             <option value="yes">Yes</option>
-                            <option value="no">No</option>
+                            <option value="no" {% if dev_defaults and dev_defaults.has_solar == 'no' %}selected{% endif %}>No</option>
                         </select>
                     </div>
 

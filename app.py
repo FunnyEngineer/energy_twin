@@ -101,7 +101,22 @@ def index():
             'cities': "0"
         }
     
-    return render_template('index.html', stats=stats)
+    # Dev defaults (only for development)
+    dev_defaults = None
+    if Config.DEV_MODE:
+        dev_defaults = {
+            'location': 'Austin, TX',
+            'home_size': '500',
+            'bedrooms': '1',
+            'occupants': '1',
+            'building_type': '50 or more Unit',
+            'heating_fuel': 'Natural Gas',
+            'cooling_type': 'Central AC',
+            'climate_zone': '2A',
+            'has_solar': 'no'
+        }
+    
+    return render_template('index.html', stats=stats, dev_defaults=dev_defaults)
 
 
 @app.route('/api/global-data')
@@ -225,6 +240,8 @@ def find_twins():
                 'monthly_usage': int(twin.get('monthly_kwh', 900)),
                 'climate_zone': twin.get('in.ashrae_iecc_climate_zone_2004', 'Unknown'),
                 'similarity_score': twin.get('similarity_score', 0),
+                'state': twin.get('in.state', 'Unknown'),
+                'timeseries_available': bool(twin.get('bldg_id') and twin.get('in.state'))
             }
             twins_formatted.append(twin_formatted)
         
@@ -286,6 +303,108 @@ def get_weather(city):
         'success': True,
         'weather': weather
     })
+
+
+@app.route('/api/timeseries/<int:building_id>')
+def get_timeseries(building_id):
+    """Fetch and process timeseries data for a building"""
+    try:
+        import requests
+        from io import BytesIO
+        
+        # Get building info from dataset
+        building_row = HOMES_DATA[HOMES_DATA['bldg_id'] == building_id]
+        if building_row.empty:
+            return jsonify({
+                'success': False,
+                'message': 'Building not found'
+            }), 404
+        
+        state = building_row.iloc[0].get('in.state', '')
+        if not state:
+            return jsonify({
+                'success': False,
+                'message': 'State information not available'
+            }), 400
+        
+        # Construct S3 URL
+        base_url = 'https://oedi-data-lake.s3.amazonaws.com/nrel-pds-building-stock/end-use-load-profiles-for-us-building-stock/2025/resstock_amy2018_release_1'
+        timeseries_url = f"{base_url}/timeseries_individual_buildings/by_state/upgrade=0/state={state}/{building_id}-0.parquet"
+        
+        print(f"📊 Fetching timeseries from: {timeseries_url}")
+        
+        # Download timeseries data
+        response = requests.get(timeseries_url, timeout=60)
+        if response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'message': f'Timeseries data not available (HTTP {response.status_code})'
+            }), response.status_code
+        
+        # Parse parquet
+        import pandas as pd
+        df = pd.read_parquet(BytesIO(response.content))
+        
+        # Process data for visualization
+        # Convert timestamp to datetime
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        # Calculate total electricity usage
+        electricity_cols = [col for col in df.columns if 'out.electricity.' in col and 'energy_consumption' in col]
+        df['total_electricity_kwh'] = df[electricity_cols].sum(axis=1)
+        
+        # Aggregate to daily data for easier visualization
+        df['date'] = df['timestamp'].dt.date
+        daily_data = df.groupby('date').agg({
+            'total_electricity_kwh': 'sum'
+        }).reset_index()
+        
+        # Also get hourly averages by hour of day (typical day pattern)
+        df['hour'] = df['timestamp'].dt.hour
+        hourly_pattern = df.groupby('hour').agg({
+            'total_electricity_kwh': 'mean'
+        }).reset_index()
+        
+        # Get monthly totals
+        df['month'] = df['timestamp'].dt.to_period('M')
+        monthly_data = df.groupby('month').agg({
+            'total_electricity_kwh': 'sum'
+        }).reset_index()
+        monthly_data['month'] = monthly_data['month'].astype(str)
+        
+        # Get breakdown by end use (monthly averages)
+        end_use_breakdown = {}
+        for col in electricity_cols:
+            end_use_name = col.replace('out.electricity.', '').replace('.energy_consumption..kwh', '').replace('_', ' ').title()
+            monthly_avg = df.groupby('month')[col].sum().mean()
+            end_use_breakdown[end_use_name] = round(float(monthly_avg), 2)
+        
+        return jsonify({
+            'success': True,
+            'building_id': int(building_id),
+            'state': state,
+            'data': {
+                'daily': daily_data.to_dict('records'),
+                'hourly_pattern': hourly_pattern.to_dict('records'),
+                'monthly': monthly_data.to_dict('records'),
+                'end_use_breakdown': end_use_breakdown
+            },
+            'stats': {
+                'total_annual_kwh': round(float(df['total_electricity_kwh'].sum()), 2),
+                'avg_daily_kwh': round(float(daily_data['total_electricity_kwh'].mean()), 2),
+                'peak_daily_kwh': round(float(daily_data['total_electricity_kwh'].max()), 2),
+                'min_daily_kwh': round(float(daily_data['total_electricity_kwh'].min()), 2)
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Error fetching timeseries: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
 
 
 # Load data when module is imported (works with both direct run and gunicorn)
