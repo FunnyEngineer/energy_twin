@@ -44,15 +44,33 @@ def convert_to_json_serializable(obj):
 
 
 def load_homes_data():
-    """Load homes data from parquet file - keep as DataFrame for efficiency"""
+    """Load homes data from parquet file - optimized for memory efficiency"""
     global HOMES_DATA
     
     try:
         if os.path.exists(DATA_FILE):
             import pandas as pd
-            # Keep as DataFrame - more efficient for large datasets
-            HOMES_DATA = pd.read_parquet(DATA_FILE)
+            
+            # MEMORY OPTIMIZATION: Read with efficient dtypes and sample if needed
+            df = pd.read_parquet(DATA_FILE)
+            
+            # Sample down to reduce memory (50k homes instead of 549k+)
+            # This still provides statistically significant results
+            MAX_HOMES = 50000  # Adjust based on available memory (512MB on Render free tier)
+            if len(df) > MAX_HOMES:
+                df = df.sample(n=MAX_HOMES, random_state=42)
+                print(f"🔧 Sampled {MAX_HOMES:,} homes from {len(df):,} for memory optimization")
+            
+            # Optimize memory by downcasting numeric types
+            for col in df.select_dtypes(include=['float64']).columns:
+                df[col] = pd.to_numeric(df[col], downcast='float')
+            for col in df.select_dtypes(include=['int64']).columns:
+                df[col] = pd.to_numeric(df[col], downcast='integer')
+            
+            HOMES_DATA = df
+            memory_mb = HOMES_DATA.memory_usage(deep=True).sum() / 1024**2
             print(f"✅ Loaded {len(HOMES_DATA):,} homes from ResStock parquet dataset")
+            print(f"📊 Memory usage: {memory_mb:.1f} MB")
             
             # Train the ML model
             if len(HOMES_DATA) > 0:
